@@ -1,5 +1,6 @@
 package com.kubuko.luckylotto;
 
+import java.util.Arrays;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -58,19 +59,38 @@ public class MainActivity extends ActionBarActivity {
 		OnClickListener dropListener = new OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				int[] numbers = pickNumbers();
+				Integer[] numbers = pickNumbers();
 				Log.d(LOG_TAG, "Picked numbers " + arrayToString(numbers));
-				dropBalls(numbers);
+				int imageHeight = getImageHeight();
+				dropBalls(numbers, 0 - imageHeight);
 			}
 		};
 		dropButton.setOnClickListener(dropListener);
 		
 		sortButton = (Button)this.findViewById(R.id.sort_button);
+		OnClickListener sortListener = new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				if (chosenNumbers != null) {
+					Log.d(LOG_TAG, "Sorting numbers " 
+							+ arrayToString(chosenNumbers));
+					Integer[] numbers = sortBalls(chosenNumbers);
+					dropBalls(numbers, 
+							getYDestination() - ( getImageHeight() / 2) );
+				}
+			}
+		};
+		sortButton.setOnClickListener(sortListener);
 	}
 	
-	private int[] pickNumbers() {
+	private int getImageHeight() {
+		LotteryBall exampleBall = lotteryBalls[lotteryBalls.length - 1];
+		return exampleBall.getScaledBitmap().getHeight();
+	}
+	
+	private Integer[] pickNumbers() {
 		
-		int[] luckyNumbers = new int[NUMBER_OF_BALLS_TO_PICK];
+		Integer[] luckyNumbers = new Integer[NUMBER_OF_BALLS_TO_PICK];
 
         for (int i = 0; i < NUMBER_OF_BALLS_TO_PICK; i++) {
             boolean alreadyIn = true;
@@ -94,30 +114,25 @@ public class MainActivity extends ActionBarActivity {
         return luckyNumbers;
 	}
 	
-	private void dropBalls(int[] numbers) {
+	private void dropBalls(Integer[] numbers, int startingY) {
 		
-		if (chosenNumbers != null) {
-			for (int i = 0; i < chosenNumbers.length; i++) {
-				View lotteryBallView = chosenNumbers[i];
-				ViewGroup parent = (ViewGroup)lotteryBallView.getParent();
-				parent.removeView(lotteryBallView);
-			}
-		}
-//		frame.invalidate();
-		
+		clearOldImages();
 		chosenNumbers = new LotteryBall[numbers.length];
-		int frameMidpoint = frame.getWidth() / 2;
+		
+		int margins = frame.getPaddingLeft() + frame.getPaddingRight();
+		int frameMidpoint = (frame.getWidth() - margins) / 2;
 		// assume all lottery ball images are the same size
 		int imageSize = 
 			lotteryBalls[lotteryBalls.length - 1].getScaledBitmap().getWidth();
 		int xPosition = 
-			frameMidpoint - ( (numbers.length / 2) * imageSize);
+			frameMidpoint - ( (numbers.length / 2) * imageSize );
 		for (int i = 0; i < numbers.length; i++) {
 			int ballNumber = numbers[i];
+			Log.d(LOG_TAG, "Starting x pos is " + xPosition 
+					+ " for ball number " + ballNumber);
 			LotteryBall ball = this.lotteryBalls[ballNumber];
 			ball.setXPos(xPosition);
-			// start off screen
-			ball.setYPos(0 - imageSize);
+			ball.setYPos(startingY);
 			chosenNumbers[i] = ball;
 			if (ball.getParent() == null) {
 				frame.addView(ball);
@@ -126,19 +141,45 @@ public class MainActivity extends ActionBarActivity {
 			xPosition += imageSize;
 		}
 	}
-	
-	private String arrayToString(int[] numbers) {
+
+	private void clearOldImages() {
 		
-		String numbersString = "[";
-		for (int i = 0; i < numbers.length; i++) {
-			numbersString += numbers[i];
-			if (i != numbers.length - 1) {
-				numbersString += ",";
+		if (chosenNumbers != null) {
+			for (int i = 0; i < chosenNumbers.length; i++) {
+				View lotteryBallView = chosenNumbers[i];
+				ViewGroup parent = (ViewGroup)lotteryBallView.getParent();
+				parent.removeView(lotteryBallView);
 			}
 		}
-		numbersString += "]";
+	}
+	
+	private Integer[] sortBalls(LotteryBall[] chosenNumbers) {
+
+		Integer[] numbers = new Integer[chosenNumbers.length];
+		for (int i = 0; i < chosenNumbers.length; i++) {
+			numbers[i] = chosenNumbers[i].getNumber();
+		}
+		Arrays.sort(numbers);
 		
-		return numbersString;
+		return numbers;
+	}
+	
+	private String arrayToString(Object[] array) {
+		
+		String arrayString = "[";
+		for (int i = 0; i < array.length; i++) {
+			arrayString += array[i];
+			if (i != array.length - 1) {
+				arrayString += ",";
+			}
+		}
+		arrayString += "]";
+		
+		return arrayString;
+	}
+	
+	private int getYDestination() {
+		return frame.getHeight() / 2;
 	}
 
 	@Override
@@ -189,9 +230,9 @@ public class MainActivity extends ActionBarActivity {
 			this.scaledBitmap = scaleImage(image);
 		}
 		
-		public void startMoving(int pause) {
+		public void startMoving(int numberOfPauses) {
 			
-			long pauseTime = pause * PAUSE_INCREMENT;
+			long pauseTime = numberOfPauses * PAUSE_INCREMENT;
 			ScheduledExecutorService executor = 
 				Executors.newScheduledThreadPool(1);
 
@@ -212,6 +253,7 @@ public class MainActivity extends ActionBarActivity {
 				}
 			}, pauseTime, REFRESH_RATE, TimeUnit.MILLISECONDS);
 		}
+		
 		@Override
 		protected synchronized void onDraw(Canvas canvas) {
 			
@@ -229,16 +271,16 @@ public class MainActivity extends ActionBarActivity {
 
 		private boolean reachedDestination() {
 			
-			int screenThreeQuarterHeight = frame.getHeight() / 2;
-			if ( yPos < screenThreeQuarterHeight ) {
+			int destinationY = getYDestination();
+			if ( yPos < destinationY ) {
 				return true;
 			} else {
 				// level out all images at the same y position
-				yPos = screenThreeQuarterHeight;
+				yPos = destinationY;
 				return false;
 			}
 		}
-		
+
 		private void stopMoving() {
 			
 			Log.d(LOG_TAG, "Stopping ball " + LotteryBall.this);
@@ -268,8 +310,12 @@ public class MainActivity extends ActionBarActivity {
 			this.yPos = yPos;
 		}
 		
-		public Bitmap getScaledBitmap() {
+		private Bitmap getScaledBitmap() {
 			return scaledBitmap;
+		}
+		
+		public int getNumber() {
+			return number;
 		}
 	}
 }
