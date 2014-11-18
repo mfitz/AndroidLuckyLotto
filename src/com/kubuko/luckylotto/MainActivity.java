@@ -12,6 +12,9 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.media.AudioManager;
+import android.media.SoundPool;
+import android.media.SoundPool.OnLoadCompleteListener;
 import android.os.Bundle;
 import android.support.v7.app.ActionBarActivity;
 import android.util.Log;
@@ -35,6 +38,11 @@ public class MainActivity extends ActionBarActivity {
 	private LotteryBall[] lotteryBalls;
 	private LotteryBall[] chosenNumbers;
 	private RelativeLayout frame;
+	
+	private AudioManager audioManager;
+	private SoundPool soundPool;
+	private int ballLandedSoundID;
+	private float streamVolume;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -81,6 +89,39 @@ public class MainActivity extends ActionBarActivity {
 			}
 		};
 		sortButton.setOnClickListener(sortListener);
+	}
+	
+	@Override
+	protected void onResume() {
+		 super.onResume();
+		 
+		 audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+		 streamVolume = 
+			(float) audioManager
+				 .getStreamVolume(AudioManager.STREAM_MUSIC)
+				 / audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+		 soundPool = new SoundPool(10, AudioManager.STREAM_MUSIC, 0);
+		 soundPool.setOnLoadCompleteListener( new OnLoadCompleteListener() {
+			 @Override
+			 public void onLoadComplete(SoundPool soundPool, 
+					 					int sampleId,
+					 					int status) {
+				 Log.d(LOG_TAG, "SoundPool has finished loading sound " 
+					 					+ sampleId + " (status = " 
+					 					+ status + ")");
+			 }
+		 });
+		 ballLandedSoundID = soundPool.load(this, R.raw.blop, 1);
+	}
+	
+	@Override
+	protected void onPause() {
+
+		Log.d(LOG_TAG, "In onPause()...");
+		soundPool.release();
+		soundPool = null;
+		
+		super.onPause();
 	}
 	
 	private int getImageHeight() {
@@ -241,7 +282,7 @@ public class MainActivity extends ActionBarActivity {
 				public void run() {
 
 					if ( stillMoving() ) {
-						frame.post(new Runnable() {
+						frame.post( new Runnable() {
 							@Override
 							public void run() {
 								LotteryBall.this.invalidate();
@@ -249,6 +290,17 @@ public class MainActivity extends ActionBarActivity {
 						});
 					} else {
 						stopMoving();
+						frame.post( new Runnable() {
+							@Override
+							public void run() {
+								soundPool.play(ballLandedSoundID, 
+										streamVolume, 
+										streamVolume, 
+										0, 
+										0, 
+										1);
+							}
+						});
 					}
 				}
 			}, pauseTime, REFRESH_RATE, TimeUnit.MILLISECONDS);
